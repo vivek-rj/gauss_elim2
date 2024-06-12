@@ -31,13 +31,6 @@ abbrev colVecofMat := Vector.map Vector.ofFn (Vector.ofFn M.transpose)
    entries as 0
 -/
 
-#check Vector.replicate
-#check Vector
-#check List.isPrefixOf
-#check List.take
-#check List.indexOf
-#check List.findIdx
-
 -- def vector_isPrefixOf : Vector Rat k → Vector Rat k → Bool
 -- | ⟨[],_⟩ , _ => true
 -- | _ , ⟨[],_⟩ => false
@@ -56,58 +49,63 @@ def row_allZerosBeforeFirstOne (row : Vector Rat m) : Bool :=
 
 abbrev vec_allZero (v : Vector Rat k) : Bool := v.toList.all (fun x => (x==0))
 
-def isRowReduced_row (ri : Vector Rat n) : Bool×(Option Nat) :=
-  if vec_allZero ri then (true,none)
-  else
-    if ri.toList.indexOf 1 = ri.length then (false,none)
-    else
-      if row_allZerosBeforeFirstOne ri then (true,ri.toList.indexOf 1)
-      else (false,none)
+def isRowReduced_row (v : Vector Rat n) : (Bool)×(Option (Fin n)) :=
+  v.inductionOn
+  (true,none)
+  (fun _ {x} _ (b,a) => if x=1 then (true,some 0) else if x=0 then (b,a.map fun idx => idx.succ) else (false,none))
+  -- | none => if x=0 then none else if x=1 then some 0 else none
+  -- | some idx => if x=0 then some (idx.succ) else if x=1 then some 0 else none)
+
+#eval isRowReduced_row ⟨[0,3],rfl⟩
 
 def isRowReduced_col (cj : Vector Rat m) : Bool := List.all (List.erase cj.toList 1) (fun x => x==0)
 
-#check Vector.toList_length
-
 --In a matrix that is in row-reduced form, the index of 1 in a row that isn't all zero is less than the length of the row
-lemma indFirstOne_lt_rowLength (rl : Vector Rat k) (h : (isRowReduced_row rl).1 = true) (h' : ¬(vec_allZero rl)) :
-  (((isRowReduced_row rl).2).getD 0) < rl.length := by
-  unfold isRowReduced_row
-  split_ifs with h1 h2
-  · have : (isRowReduced_row rl).1 == false := by unfold isRowReduced_row; rw [if_pos h1, if_neg h']; rfl
-    simp at h this; rw [h] at this; contradiction
-  · show rl.toList.indexOf 1 < rl.length
-    simp_rw [← rl.toList_length]
-    apply List.indexOf_lt_length.mpr
-    rcases lt_or_gt_of_ne h1 with indlt|indgt
-    simp_rw [← rl.toList_length] at indlt
-    exact List.indexOf_lt_length.mp indlt
-    have l1 := rl.toList.indexOf_le_length (a:=1)
-    have nl1 := not_le_of_gt indgt
-    simp_rw [← rl.toList_length] at nl1
-    contradiction
-  · have : (isRowReduced_row rl).1 == false := by
-      unfold isRowReduced_row; rw [if_neg h', if_neg h2, if_neg h1]; rfl
-    simp at h this; rw [h] at this; contradiction
+-- lemma indFirstOne_lt_rowLength (rl : Vector Rat k) (h : (isRowReduced_row rl).1 = true) (h' : ¬(vec_allZero rl)) :
+--   (((isRowReduced_row rl).2).getD 0) < rl.length := by
+--   unfold isRowReduced_row
+--   split_ifs with h1 h2
+--   · have : (isRowReduced_row rl).1 == false := by unfold isRowReduced_row; rw [if_pos h1, if_neg h']; rfl
+--     simp at h this; rw [h] at this; contradiction
+--   · show rl.toList.indexOf 1 < rl.length
+--     simp_rw [← rl.toList_length]
+--     apply List.indexOf_lt_length.mpr
+--     rcases lt_or_gt_of_ne h1 with indlt|indgt
+--     simp_rw [← rl.toList_length] at indlt
+--     exact List.indexOf_lt_length.mp indlt
+--     have l1 := rl.toList.indexOf_le_length (a:=1)
+--     have nl1 := not_le_of_gt indgt
+--     simp_rw [← rl.toList_length] at nl1
+--     contradiction
+--   · have : (isRowReduced_row rl).1 == false := by
+--       unfold isRowReduced_row; rw [if_neg h', if_neg h2, if_neg h1]; rfl
+--     simp at h this; rw [h] at this; contradiction
 
 #check Vector.map
 
-def testcl := Vector.map Vector.ofFn (Vector.ofFn !![1,4,7;2,5,8;3,6,9])
-
-#check Vector.map (Vector.drop 1) testcl
-
-def isRowReducedAux (rl : Vector (Vector Rat k2) k1) (cl : Vector (Vector Rat k1) k2) : Bool :=
-  match rl with
-  | ⟨[],_⟩ => true
-  | ⟨a::as,ha⟩ =>
-    if h1 : vec_allZero a then isRowReducedAux ⟨as,congrArg Nat.pred ha⟩ (Vector.map (Vector.drop 1) cl) --cl (by intro i; have := h (i.castSucc); rw [← (h0' i)] at this; exact this)
-    else
-      ∃ h2 : (isRowReduced_row a).1,
-      (isRowReduced_col (cl.get ⟨(((isRowReduced_row a).2).getD 0),indFirstOne_lt_rowLength a h2 h1⟩)) ∨
-          isRowReducedAux ⟨as,congrArg Nat.pred ha⟩ (Vector.map (Vector.drop 1) cl)
+def isRowReducedAux (rl : Vector (Vector Rat n) m) (cl : Vector (Vector Rat m) n) : Bool :=
+  rl.inductionOn
+  (true)
+  (fun _ {row} => fun
+  | false => false
+  | true => match isRowReduced_row row with
+    | (true,none) => true
+    | (true,some idx) => isRowReduced_col (cl.get idx)
+    | (false,_) => false)
+  -- match rl with
+  -- | ⟨[],_⟩ => true
+  -- | ⟨a::as,ha⟩ =>
+  --   if h1 : vec_allZero a then isRowReducedAux ⟨as,congrArg Nat.pred ha⟩ (Vector.map (Vector.drop 1) cl) --cl (by intro i; have := h (i.castSucc); rw [← (h0' i)] at this; exact this)
+  --   else
+  --     ∃ h2 : (isRowReduced_row a).1,
+  --     (isRowReduced_col (cl.get ⟨(((isRowReduced_row a).2).getD 0),indFirstOne_lt_rowLength a h2 h1⟩)) ∨
+  --         isRowReducedAux ⟨as,congrArg Nat.pred ha⟩ (Vector.map (Vector.drop 1) cl)
 
 --Checks whether matrix is in row-reduced form
 def isRowReduced : Bool :=
   isRowReducedAux (rowVecofMat M) (colVecofMat M)
+
+#eval isRowReduced !![1,0,-3;0,1,2]
 
 /-
 Row-reduced echelon form
@@ -118,11 +116,21 @@ these rows occurs in columns k₁,k₂,...,k_r, then  k₁< k₂<...< k_r
 -/
 
 --Gives list containing k₁,k₂,...,k_r
-def nonzColIndices : List (Vector Rat k) → List ℕ
-  | [] => []
-  | a::as =>
-      if ¬(isRowReduced_row a).1 then []
-      else [((isRowReduced_row a).2).getD 0] ++ (nonzColIndices as)
+-- def nonzColIndices : List (Vector Rat k) → List ℕ
+--   | [] => []
+--   | a::as =>
+--       if (isRowReduced_row a).1 then
+--         (isRowReduced_row a).2.map fun idx => idx::(nonzColIndices as)
+--       else []
+      -- if ¬(isRowReduced_row a).1 then []
+      -- else [((isRowReduced_row a).2).getD 0] ++ (nonzColIndices as)
+
+def nonzColIndices : List (Fin n) :=
+  (rowVecofMat M).inductionOn
+  ([])
+  (fun _ {row} _ {l} => match isRowReduced_row row with
+    | (_,none) => l
+    | (_,some idx) => idx::l)
 
 -- def nonzColIndices : Vector (Vector Rat k1) k2 → List ℕ
 --   | ⟨[],_⟩ => []
@@ -133,25 +141,24 @@ def nonzColIndices : List (Vector Rat k) → List ℕ
 def isZeroMatrix : Bool := (rowVecofMat M).toList.all (fun x => (x.toList.all (fun y => y==0 )))
 
 def zeroRowsLast : Bool :=
-  let rl := (rowVecofMat M).toList
-  let indOfLastNonzeroRow := rl.length-1-((rl.reverse).findIdx (fun x => (x.toList.any (fun y => ¬(y==0)))))
-  let indsOfZeroRows := (List.unzip (rl.indexesValues (fun x => x.toList.all (fun x => x==0)))).1
-  ([indOfLastNonzeroRow]++indsOfZeroRows).Sorted (·≤·)
+  (rowVecofMat M).inductionOn
+  (true)
+  (fun _ {row} {rl} => fun
+  | false => false
+  | true => if vec_allZero row then match rl with
+      |⟨[],_⟩ => true
+      |⟨a::_,_⟩ => vec_allZero a
+      else true)
+  -- let rl := (rowVecofMat M).toList
+  -- let indOfLastNonzeroRow := rl.length-1-((rl.reverse).findIdx (fun x => (x.toList.any (fun y => ¬(y==0)))))
+  -- let indsOfZeroRows := (List.unzip (rl.indexesValues (fun x => x.toList.all (fun x => x==0)))).1
+  -- ([indOfLastNonzeroRow]++indsOfZeroRows).Sorted (·≤·)
+
+#eval zeroRowsLast !![0,0,0;0,0,0;0,0,0;0,0,0]
 
 def isRowReducedEchelon : Bool :=
-  (isZeroMatrix M) ∨
+  -- (isZeroMatrix M) ∨
     (isRowReduced M) ∧
       (zeroRowsLast M) ∧
-        (nonzColIndices (List.filter (fun x => x.toList.any (fun x => ¬x==0)) (rowVecofMat M).toList)).Sorted (·<·)
-
-#eval isRowReducedEchelon !![(1:Rat)/2,0,-3,1,0;2,1,0,0,0]
-#eval isRowReducedEchelon !![0,0;0,0]
-#eval isRowReducedEchelon !![1,2,3;4,5,6;7,8,9]
-#eval isRowReducedEchelon !![1,0;0,1]
-
-def C := !![-1,0,1;2,1,0;0,0,(0:Rat)]
-#eval isRowReducedEchelon C
-
-#eval isRowReducedEchelon !![0,5,1;1,0,0;0,0,0]
-#eval isRowReducedEchelon !![7,0,1;1,1,0;0,0,0;0,0,0]
-#eval isRowReducedEchelon !![1,0,-3,0,1,2,0,0,0]
+        (nonzColIndices M).Sorted (·<·)
+        -- (nonzColIndices (List.filter (fun x => x.toList.any (fun x => ¬x==0)) (rowVecofMat M).toList)).Sorted (·<·)
