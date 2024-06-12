@@ -101,7 +101,7 @@ theorem indNonzElt_cons_non0 (v : Vector Rat k) (x : Rat) (hx : x≠0) :
   simp [hx]
 
 theorem indNonzElt_cons_0_some (v : Vector Rat k) (idx : Fin k) (hidx : v.get idx ≠ 0) (hv : indNonzElt v = some ⟨idx,hidx⟩) :
-  indNonzElt (Vector.cons 0 v) = some ⟨idx.1.succ,by simp [hidx]⟩ := by
+  indNonzElt (Vector.cons 0 v) = some ⟨idx.succ,by simp [hidx]⟩ := by
   rw [indNonzElt,Vector.inductionOn_cons,← indNonzElt]
   simp [hv]
 
@@ -146,6 +146,8 @@ def elimColBelow_ij (i:Fin m) (j:Fin n) : List (ElemOp (m:=m)) :=
   List.ofFn fun r : Fin (m-i-1) =>
   have h : r.val+(i.val+1)<m := (Nat.add_lt_of_lt_sub (Eq.subst (Nat.sub_sub m i.1 1) (r.2)))
   rowMulAdd (-M ⟨r+i+1,h⟩ j) ⟨r+i+1,h⟩ i
+
+
 
 /-Row reduction algorithm - Part 1 (Row echelon form)
 0. Start from (i,j) = (0,0)
