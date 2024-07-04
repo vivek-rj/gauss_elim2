@@ -92,6 +92,8 @@ def Vector.indNonzElt {F : Type} [Field F] [DecidableEq F] (v : Vector F k) : Op
   v.inductionOn none
   fun _ {x} _ a => if h : x ≠ 0 then some ⟨0, h⟩ else a.map fun idx => ⟨idx.1.succ, idx.2⟩
 
+--separate zero row and nz row
+
 -- def List.indNonzElt {F : Type} [Field F] [DecidableEq F] (l : List F) (hl : l.length = k) : Option {idx : Fin k // l.get (idx.cast (Eq.symm hl)) ≠ 0} :=
 --   l.rec none
 --   fun {x} _ a => if h : x ≠ 0 then some ⟨⟨0,_⟩, h⟩ else a.map fun idx => ⟨idx.1.succ, idx.2⟩
@@ -175,14 +177,19 @@ lemma Vector.indNonzElt_zeroVecAppend {p : Nat} {w : Vector F n} (hw : w.indNonz
   | succ q ih =>
     simp [zeroVec,replicate,append]
     -- have : (0 ::ᵥ (⟨List.replicate q 0 ++ l,rfl⟩ : Vector F (q+n))).length = q+1+n := by simp [hl]; ring
-    -- have : ⟨0 :: (List.replicate q 0 ++ l), ⋯⟩ = 0 ::ᵥ ⟨List.replicate q 0 ++ l, ⋯⟩ :=
+    have : (⟨0 :: (List.replicate q 0 ++ l), by simp [hl]; ring⟩ : Vector F (q+1+n)) = (0 ::ᵥ ⟨List.replicate q 0 ++ l, rfl⟩).congr (by simp [hl]; ring) := rfl
+    rw [this]
     sorry
+
 
 #check Nat.odd_iff
 #check List.splitAt
 
 def Vector.splitAt (i : Fin n) (v : Vector α n) : Vector α i × Vector α (n-i) :=
   ⟨⟨(v.toList.splitAt i).1,by simp⟩,⟨(v.toList.splitAt i).2,by simp⟩⟩
+
+-- fn that returns splitting of vector into 0s, nonz elt and tail
+--update to 4.9.0
 
 theorem Vector.isreducedRow_iff (v : Vector F n) :
   v.isReducedRow ↔ match v.indNonzElt with | none => true | some idx => (v.get idx = 1) ∧ (v.splitAt idx).1.allZero := by
