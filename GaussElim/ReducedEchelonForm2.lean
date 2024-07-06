@@ -1,5 +1,8 @@
 import Mathlib.Data.Matrix.Notation
 
+/--
+Two vectors are equal iff their corresponding lists are equal
+-/
 theorem Vector.eq_iff (a1 a2 : Vector α n) : a1 = a2 ↔ toList a1 = toList a2 := by
   constructor
   intro h; rw [h]
@@ -9,6 +12,17 @@ variable {F : Type} [Field F] [DecidableEq F]
 
 -- structure ReducedRow0 (n : Nat)
 
+/--
+The type of Vectors that would be rows in a row-reduced matrix with `n` columns in the field `F`.
+It is of the form `[0,0,...,0,1,(arbitrary entries)]`
+
+If `row : ReducedRowN0 F n`:
+* `row.z` gives the leading zeros, or `none` if the row is all zeros
+* `row.k` gives the length of the arbitrary part
+* `row.tail` gives the arbitrary part
+* `row.h` is a proof that if the row isn't all zeros, then
+  `row.z` + `row.k` + 1 = n
+-/
 structure ReducedRowN0 (F : Type) [Field F] [DecidableEq F] (n : Nat) where
   z : Fin n
   k : Nat
@@ -21,6 +35,9 @@ def zeroVec (k: Nat) : Vector F k := Vector.replicate k 0
 
 -- def ReducedRow0.toVector (_ : ReducedRow0 n): Vector F n := zeroVec n
 
+/--
+Form a Vector from the data stored in the `ReducedRow` type
+-/
 def ReducedRowN0.toVector (row : ReducedRowN0 F n): Vector F n := ((zeroVec row.z).append (Vector.cons 1 row.tail)).congr (Eq.symm row.h)
 
 -- def ReducedRow.toVector (row : ReducedRow F n): Vector F n :=
@@ -34,6 +51,12 @@ def Vector.any (v : Vector F n) (p : F → Bool) := v.toList.any p
 
 @[simp] theorem Vector.any_def (v : Vector F n) (p : F → Bool) : v.any p = v.toList.any p := rfl
 
+/--
+Given a vector that has a nonzero element, this function returns these values as a tuple :
+* The first nonzero element in the vector, with a proof of it being nonzero
+* The index at which it is present
+* The elements of the vector to the right of this element.
+-/
 def Vector.firstNonzElt (v : Vector F n) (h: v.any (· ≠ 0)) : {x:F // x≠0}×(i : Fin n)×(Vector F (n-i-1)) :=
   match v with
   | ⟨[],hv⟩ => by simp at h
@@ -50,11 +73,11 @@ def Vector.firstNonzElt (v : Vector F n) (h: v.any (· ≠ 0)) : {x:F // x≠0}�
       let (value, ⟨index, tail⟩) := firstNonzElt (⟨ys,by simp at ha; rw [← ha]; simp⟩ : Vector F (n-1)) ys_nontriv
       exact (value, ⟨index.succ.cast (by simp [Nat.sub_add_cancel hn]),tail.congr (by simp [Nat.Simproc.sub_add_eq_comm n (↑index) 1])⟩)
 
-theorem Vector.firstNonzElt_cons_non0 {v : Vector F n} {x : F} (hx : x ≠0) :
-  (Vector.cons x v).firstNonzElt (by simp [hx]) = (⟨x,hx⟩,⟨⟨0,by simp⟩,v⟩) := by sorry
-  -- induction' v using Vector.inductionOn with _ x w hw
-  -- ·
-  -- · sorry
+-- theorem Vector.firstNonzElt_cons_non0 {v : Vector F n} {x : F} (hx : x ≠0) :
+--   (Vector.cons x v).firstNonzElt (by simp [hx]) = (⟨x,hx⟩,⟨⟨0,by simp⟩,v⟩) := by sorry
+--   -- induction' v using Vector.inductionOn with _ x w hw
+--   -- ·
+--   -- · sorry
 
 def v : Vector Rat 5 := ⟨[0,0,4,2,3],rfl⟩
 #eval v.firstNonzElt (by decide)
@@ -72,29 +95,39 @@ lemma Vector.eq_firstNonzEltAppend (v : Vector F n) (h: v.any (· ≠ 0)) :
 theorem Vector.congr_toListEq {n m : ℕ} (h : n = m) (v : Vector α n) :
   v.toList = (v.congr h).toList := rfl
 
-lemma Vector.cons_eq_listCons (a : α) (l : List α) : (⟨a::l,by simp⟩ : Vector α l.length.succ) = Vector.cons a ⟨l,rfl⟩ := rfl
+lemma Vector.cons_eq_listCons (a : α) (l : List α) : ⟨a::l,by simp⟩ = Vector.cons a ⟨l,rfl⟩ := rfl
 
 theorem Vector.append_def {n m : Nat} (v : Vector α n) (w : Vector α m) :
   v.append w = ⟨v.toList++w.toList,by simp⟩ := rfl
 
+#check HEq.subst
+
+/--
+Appending an all zero vector of length `p` to the left of a vector increases the index of its
+first nonzero element by `p`
+-/
 lemma Vector.firstNonzElt_zeroVecAppend {p : Nat} {w : Vector F n} (hw : w.any (.≠0)) :
-  (((zeroVec p).append w).firstNonzElt (by simp at hw ⊢; rcases hw with ⟨x,hx⟩; use x; exact ⟨Or.inr hx.1,hx.2⟩)).1 = (w.firstNonzElt hw).1 := by
+  (((zeroVec p).append w).firstNonzElt (by simp at hw ⊢; rcases hw with ⟨x,hx⟩; use x; exact ⟨Or.inr hx.1,hx.2⟩)).2.1 = p+(w.firstNonzElt hw).2.1 := by
   induction p with
   | zero =>
     simp [zeroVec,replicate,append_def]
     have := w.mk_toList (w.toList_length)
-    congr 2
-    · simp
+    congr 4 <;> try simp
     · rw [Fin.heq_fun_iff]; simp; simp
-    · simp
+    · rw [Fin.heq_fun_iff]; simp; simp
     · convert heq_of_eq this
       · rw [Nat.zero_add]; rfl
       · rw [Nat.zero_add]
-  | succ n ih =>
+  | succ q ih =>
     simp [zeroVec,replicate,append_def] at ih ⊢
+    -- have := (cons_eq_listCons 0 (List.replicate q 0 ++ w.toList))
+    -- have : (⟨0 :: (List.replicate (List.replicate q 0).length 0 ++ w.toList), sorry⟩ : Vector F (q+w.toList.length+1)) =
+    -- 0 ::ᵥ ⟨List.replicate (List.replicate q 0).length 0 ++ w.toList, sorry⟩ := List.length_replicate q 0
     sorry
-    -- rw [cons_eq_listCons 0 (List.replicate n 0 ++ w.toList)]
 
+/-
+A vector is in reduced row form iff its first nonzero element is 1
+--/
 theorem Vector.isreducedRowN0_iff_firstNonzElt1 (v : Vector F n) (h: v.any (· ≠ 0)) :
   (v.firstNonzElt h).1 = ⟨1,by norm_num⟩ ↔ v.isReducedRowN0 := by
   constructor
@@ -120,7 +153,6 @@ theorem Vector.isreducedRowN0_iff_firstNonzElt1 (v : Vector F n) (h: v.any (· �
     simp [cons] at hv
     sorry
 
-
 def Vector.Mem (a : α) : Vector α n → Prop := fun v => v.toList.Mem a
 
 instance : Membership α (Vector α n) where
@@ -131,9 +163,16 @@ theorem Vector.mem_def (v : Vector α n) : a ∈ v ↔ a ∈ v.toList := Iff.rfl
 instance [DecidableEq α] (a : α) (v : Vector α n) : Decidable (a ∈ v) :=
   inferInstanceAs <| Decidable (a ∈ v.toList)
 
+/--
+Checks if the new reduced row has zeros wherever the other reduced rows have a leading one
+-/
 def ReducedRowN0.zerosSelf (row : ReducedRowN0 F n) (R : Vector (ReducedRowN0 F n) m) : Prop :=
   ∀ r ∈ R, row.toVector.get r.z = 0
 
+/--
+Checks if the number of leading zeros in the new reduced row is less than the number of zeros
+in the first row of the list
+-/
 def ReducedRowN0.leadingZerosLT (row : ReducedRowN0 F n) (R : Vector (ReducedRowN0 F n) m) :=
   match R.toList.head? with | none => true | some r => row.z < r.z
 
@@ -143,6 +182,13 @@ instance : Decidable (row.zerosSelf R) :=
   inferInstanceAs <| Decidable ((∀ r ∈ R.toList, row.toVector.get r.z = 0))
 end
 
+/--
+A function that inductively checks if a list of reduced rows is in row-reduced echelon form
+by checking for these conditions in every new row that gets added to the start of the list:
+1. The new reduced row has zeros wherever the other reduced rows have a leading one
+2. The number of leading zeros in the new reduced row is less than the number of zeros
+in the first row of the list
+-/
 inductive RowReducedEchelonFormN0 : (R : Vector (ReducedRowN0 F n) m) → Prop where
 | nil : RowReducedEchelonFormN0 Vector.nil
 | cons : (row : ReducedRowN0 F n) → RowReducedEchelonFormN0 R →
