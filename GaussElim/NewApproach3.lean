@@ -3,9 +3,33 @@ import Mathlib.Data.Fin.Tuple.Reflection
 
 variable (F : Type) [Field F] [DecidableEq F]
 
+/--
+A custom inductive type for `m×n` matrices over `F` in Row Echelon Form. If `M`
+is a term of type `RowEchelonForm F m n`, then a new term of this type can be
+constructed by either
+* padding a column of zeros to the left of `M`,
+* building the `(m+1)×(n+1)` block matrix
+
+  `1 | v`
+
+  `0 | M`
+
+  where v is a vector of size `n`, `0` is a column with m zeros, and `1` is a singleton.
+-/
 inductive RowEchelonForm : (m n : Nat) → Type where
+  /-- this constructor represents the trivial matrices with no columns.
+      These are the starting point from which other row reduced matrices are built. -/
 | nil : RowEchelonForm m 0
+ /-- Given a row reduced matrix, this adds a column of zeros to its left. -/
 | pad : RowEchelonForm m n → RowEchelonForm m (n+1)
+/-- if `M` is the row-reduced matrix and `v` is the vector, this forms the block matrix
+
+  `1 | v`
+
+  `0 | M`
+
+     where `0` represents a column of zeros of size `m` and `1` is a singleton.
+     -/
 | extend : RowEchelonForm m n → (Fin n → F) → RowEchelonForm (m+1) (n+1)
 deriving Repr
 
@@ -17,17 +41,14 @@ def v1 := ![0,0,(0:Rat)]
 #check Fin.append
 #check Matrix.of
 
+/--
+Represents a term of type `RowEchelonForm F m n` as an `m×n` matrix.
+-/
 def RowEchelonForm.toMatrix (R : RowEchelonForm F m n) : Matrix (Fin m) (Fin n) F :=
   match R with
   | nil => fun _ => ![]
   | pad R0 => FinVec.map (fun r => (Matrix.vecCons 0 r)) R0.toMatrix
   | extend R0 v => Matrix.vecCons (Matrix.vecCons 1 v) (FinVec.map (fun r => (Matrix.vecCons 0 r)) R0.toMatrix)
-
-def RowEchelonForm.pivots (R : RowEchelonForm F m n) : List (Fin n) :=
-  match R with
-  | nil => []
-  | pad R0 => R0.pivots.map Fin.succ
-  | extend R0 v => 0::(R0.pivots.map Fin.succ)
 
 variable {F} in
 @[simp] def Fin.allZero (v : Fin m → F) : Prop := ∀ (i : Fin m), v i = 0
@@ -41,6 +62,10 @@ end
 #eval Fin.allZero v1
 
 variable {F} in
+/--
+A tuple `v` has all its entries as `0` if and only if its head is `0` and all the
+entries of its tail are `0`.
+-/
 theorem Fin.allZero_head_tail (v : Fin (m+1) → F) : Fin.allZero v ↔ v 0 = 0 ∧ Fin.allZero (Fin.tail v) := by
   constructor
   · intro hv
@@ -65,6 +90,11 @@ theorem Fin.allZero_head_tail (v : Fin (m+1) → F) : Fin.allZero v ↔ v 0 = 0 
       exact h2 ⟨k,Nat.succ_lt_succ_iff.mp hk⟩
 
 variable {F} in
+/--
+Given a tuple where not all of its entries are `0`, this function extracts the
+index of a nonzero element, along with a proof that the element at that index is
+nonzero.
+-/
 def Fin.allZero_not_ex_nonzero {v : Fin (m+1) → F} (hv : ¬ Fin.allZero v) :
   {i : Fin (m+1) // v i ≠ 0} := by
   induction m with
@@ -87,6 +117,9 @@ lemma hv2 : (Fin.allZero v2) := by decide
 -- #eval Fin.allZero_not_ex_nonzero hv2
 
 variable {F} in
+/--
+A tuple that doesn't have all of its entries as `0` is of size at least 1.
+-/
 lemma Fin.allZero_not_length {v : Fin k → F} (hv : ¬Fin.allZero v) : k≥1 := by
   contrapose hv
   push_neg at *
@@ -96,13 +129,23 @@ lemma Fin.allZero_not_length {v : Fin k → F} (hv : ¬Fin.allZero v) : k≥1 :=
   | l+1 => contradiction
 
 variable {F} in
+/--
+Deletes the first row of a matrix
+-/
 def Matrix.del_1strow (M : Matrix (Fin (m+1)) (Fin n) F) : Matrix (Fin m) (Fin n) F :=
   M.submatrix (fun l => ⟨l+1,Nat.add_lt_of_lt_sub l.2⟩) (·)
 
 variable {F} in
+/--
+Deletes the first column of a matrix
+-/
 def Matrix.del_1stcol (M : Matrix (Fin m) (Fin (n+1)) F) : Matrix (Fin m) (Fin n) F :=
   M.submatrix (·) (fun l => ⟨l+1,Nat.add_lt_of_lt_sub l.2⟩)
 
+/--
+`ElemOp F m` is the type of elementary row operations that can be performed on
+a matrix over `F` with `m` rows
+-/
 inductive ElemOp (m : ℕ) : Type where
 | scalarMul (c : F) (hc : c≠0) (i : Fin m) : ElemOp m
 | rowSwap (i : Fin m) (j : Fin m) : ElemOp m
@@ -110,6 +153,9 @@ inductive ElemOp (m : ℕ) : Type where
 
 namespace ElemOp
 
+/--
+Operates an `E : ElemOp F m` on the `m×n` matrix `A`
+-/
 @[simp] def onMatrix (E : ElemOp F m) (A : Matrix (Fin m) (Fin k) F) : Matrix (Fin m) (Fin k) F :=
 match E with
 | scalarMul c _ i => A.updateRow i (c • (A i))
@@ -120,6 +166,7 @@ match E with
 end ElemOp
 
 variable {F} in
+/--Row recursor for matrices-/
 def Matrix.rowRec {motive : {n : Nat} → Matrix (Fin n) α F → Sort _}
   (zero : (M : Matrix (Fin 0) α F) → motive M)
   (succ : {n : Nat} → (ih : (M : Matrix (Fin n) α F) → motive M) → ((M : Matrix (Fin n.succ) α F) → motive M)) :
@@ -130,15 +177,21 @@ def Matrix.rowRec {motive : {n : Nat} → Matrix (Fin n) α F → Sort _}
   | _+1 => succ (Matrix.rowRec zero succ)
 
 variable {F} in
+/--Extracts the first `k` rows of a matrix-/
 def Matrix.firstkRows (M : Matrix (Fin m) (Fin n) F) (k : ℕ) (hk : k ≤ m) : Matrix (Fin k) (Fin n) F :=
   M.submatrix (fun i => i.castLE hk) (fun j => j)
 
 #eval mat.firstkRows 2 (Nat.AtLeastTwo.prop)
 
+/--Appends the given row to the bottom of the matrix-/
 def Matrix.append_row (M : Matrix (Fin m) (Fin n) α) (v : (Fin n) → α) : Matrix (Fin (m+1)) (Fin n) α :=
   Fin.append M (row (Fin 1) v)
 
 variable {F} in
+/--
+Given the `(i,j)`th entry of a matrix is 1, this function uses elementary
+row operations to clear the column below this entry.
+-/
 def Matrix.eltColBelow (M : Matrix (Fin m) (Fin n) F) (hij : M i j = 1) : Matrix (Fin m) (Fin n) F :=
   Matrix.rowRec (motive := fun {m} M => {i : Fin m} → M i j = 1 → Matrix (Fin m) (Fin n) F)
     (zero := fun M {i} _ => M)
@@ -162,18 +215,11 @@ def matr := !![(1:Rat),2,3;4,5,6;7,8,9]
 def r1 : RowEchelonForm Rat 1 3 := RowEchelonForm.extend (RowEchelonForm.pad (RowEchelonForm.pad RowEchelonForm.nil)) ![3,4]
 #eval r1.toMatrix
 
-variable {F} in
-def RowEchelonForm.pad_k (k : ℕ) (R : RowEchelonForm F m n) : RowEchelonForm F m (n+k) :=
-  match k with
-  | 0 => R
-  | k+1 => RowEchelonForm.pad (RowEchelonForm.pad_k k R)
-
-def r2 := RowEchelonForm.pad_k 3 r1
-#eval r2.toMatrix
-
-def RowEchelonForm.cast : m = m' → n = n' → RowEchelonForm F m n → RowEchelonForm F m' n'
-  | rfl, rfl => id
-
+/--
+Given an `m×n` matrix M over a field `F`, this function performs elementary row
+operations on M such that it can be written as a term of type
+`RowEchelonForm F m n`.
+-/
 def Matrix.toRowEchelonForm (M : Matrix (Fin m) (Fin n) F) : RowEchelonForm F m n :=
   match n with
   | 0 => RowEchelonForm.nil
@@ -206,39 +252,5 @@ def Matrix.toRowEchelonForm (M : Matrix (Fin m) (Fin n) F) : RowEchelonForm F m 
 def mat2 : Matrix _ _ Rat := !![1,-2,1,-1;2,1,3,8;4,-7,1,-2]
 #eval (mat2.toRowEchelonForm).toMatrix
 
-    -- match m, M2 with
-    -- | 0, M2 =>
-    --   let B := RowEchelonForm.pad_k n (RowEchelonForm.nil)
-    --   RowEchelonForm.extend (B.cast (rfl) (Nat.zero_add n)) (Fin.tail (M2 0))
-    -- | k+1, M2 =>
-
-    -- let v := ((M2.del_1stcol) 0)
-    -- RowEchelonForm.extend (M2.del_1stcol.del_1strow).toRowEchelonForm v
-    -- match m, M, hM, i, hi with
-    -- | 0, M, hM, i, hi => sorry
-    -- | k+1, M, hM, i, hi =>
-
-
-    -- try using Anand's matrix row recursor
-    -- try using his row echelon form cast function
-
-    -- Exists.elim (Fin.allZero_not_ex_nonzero hM)
-    -- (fun i hi =>
-    -- match m with
-    -- | 0 => sorry
-    -- | k+1 =>
-    -- let q := M 0
-    -- -- let M1 := (ElemOp.rowSwap 0 i).onMatrix F M
-    -- -- have hM1 : M1 0 0 ≠ 0 := by
-    -- --   unfold_let
-    -- --   simp [updateRow_apply]
-    -- --   split_ifs with h1
-    -- --   · rw [h1]; exact hi
-    -- --   · exact hi
-    -- -- let p := M1 0 0
-    -- -- let M2 := (ElemOp.scalarMul (p⁻¹) (inv_ne_zero hM1) 0).onMatrix F M1
-    -- -- let v := ((M2.del_1stcol) 0)
-    -- -- RowEchelonForm.extend (M2.del_1stcol.del_1strow).toRowEchelonForm v
-    -- let v := ((M.del_1stcol) 0)
-    -- RowEchelonForm.extend (M2.del_1stcol.del_1strow).toRowEchelonForm v
-    -- )
+--define RowReducedEcelonForm F m n
+--define back substitution function, RowEchelonForm F m n → RowReducedEchelonForm F m n
