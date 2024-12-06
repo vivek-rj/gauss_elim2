@@ -459,7 +459,13 @@ lemma RowEchelonForm.zero_rows_pad (R : RowEchelonForm F 0 n) :
 --An REF with its first pivot at (i,j) is fromed from j paddings and an extend
 
 lemma RowEchelonForm.l1 (i : Fin m) (j : Fin n) (R : RowEchelonForm F m (n+j)) (hij : R.toMatrix i (j.castLE (Nat.le_add_right n ↑j)) = 1) (ptail : List {(i,j) | R.toMatrix i j = 1})
-  (hplist : R.pivots = ⟨(i,(j.castLE (Nat.le_add_right n ↑j))),by exact hij⟩::ptail) : ∃ (R0 : RowEchelonForm F m n) (v : Fin n → F), R = Nat.iterate_ind (α:=fun x => RowEchelonForm F m (n+x)) pad j R0 := by sorry
+  (hplist : R.pivots = ⟨(i,(j.castLE (Nat.le_add_right n ↑j))),by exact hij⟩::ptail) : ∃ (R0 : RowEchelonForm F m n) (v : Fin n → F), R = Nat.iterate_ind (α:=fun x => RowEchelonForm F m (n+x)) pad j R0 := by
+  match n with
+  | 0 => have := Fin.pos j; contradiction
+  | n+1 =>
+    induction j using Fin.induction with
+    | zero => simp at *
+    | succ k ih => sorry
 
 variable {F} in
 /--
