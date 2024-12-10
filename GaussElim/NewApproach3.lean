@@ -1,8 +1,13 @@
 import Mathlib.Data.Matrix.Notation
 import Mathlib.Data.Fin.Tuple.Reflection
 
-variable (F : Type) [Field F] [DecidableEq F]
 
+
+variable {F : Type} [Field F] [DecidableEq F]
+
+
+
+variable (F) in
 /--
 A custom inductive type for `m×n` matrices over `F` in Row Echelon Form (abbreviated as REF). If `M`
 is a term of type `RowEchelonForm F m n`, then a new term of this type can be
@@ -33,15 +38,8 @@ inductive RowEchelonForm : (m n : Nat) → Type where
 | extend : RowEchelonForm m n → (Fin n → F) → RowEchelonForm (m+1) (n+1)
 deriving Repr
 
-def mat := !![1,2,3;4,5,6;7,8,(9:Rat)]
-#eval (Matrix.vecCons ![-1,-2,(-3:Rat)] mat)
-def v1 := ![0,0,(0:Rat)]
-#eval FinVec.map (fun r => (Fin.cons 0 r : Fin _ → _)) mat
-#eval FinVec.map (fun r => (Matrix.vecCons 0 r)) mat
-#check Fin.append
-#check Matrix.of
 
-variable {F} in
+
 /--
 Represents a term of type `RowEchelonForm F m n` as an `m×n` matrix.
 -/
@@ -51,23 +49,72 @@ def RowEchelonForm.toMatrix (R : RowEchelonForm F m n) : Matrix (Fin m) (Fin n) 
   | pad R0 => FinVec.map (fun r => (Matrix.vecCons 0 r)) R0.toMatrix
   | extend R0 v => Matrix.vecCons (Matrix.vecCons 1 v) (FinVec.map (fun r => (Matrix.vecCons 0 r)) R0.toMatrix)
 
-variable {F} in
-@[simp] def Fin.allZero (v : Fin m → F) : Prop := ∀ (i : Fin m), v i = 0
 
-section
-variable (v : Fin m → F)
-instance : Decidable (Fin.allZero v) :=
+
+def mat := !![1,2,3;4,5,6;7,8,(9:Rat)]
+#eval (Matrix.vecCons ![-1,-2,(-3:Rat)] mat)
+def v1 := ![0,0,(0:Rat)]
+#eval FinVec.map (fun r => (Fin.cons 0 r : Fin _ → _)) mat
+#eval FinVec.map (fun r => (Matrix.vecCons 0 r)) mat
+
+
+
+/--Row recursor for matrices-/
+def Matrix.rowRec {motive : {m : Nat} → Matrix (Fin m) α F → Sort _}
+  (zero : (M : Matrix (Fin 0) α F) → motive M)
+  (succ : {k : Nat} → (ih : (M : Matrix (Fin k) α F) → motive M) → ((M : Matrix (Fin k.succ) α F) → motive M)) :
+  {m : Nat} → (M : Matrix (Fin m) α F) → motive M :=
+  fun {m} ↦
+  match m with
+  | 0 => zero
+  | _+1 => succ (Matrix.rowRec zero succ)
+
+
+
+variable (F) in
+/--
+`ElemOp F m` is the type of elementary row operations that can be performed on
+a matrix over `F` with `m` rows
+-/
+inductive ElemOp (m : ℕ) : Type where
+/-- Takes a nonzero `c : F` and multiplies it to the `i`th row-/
+| scalarMul (c : F) (hc : c≠0) (i : Fin m) : ElemOp m
+/-- Swaps rows `i` and `j`-/
+| rowSwap (i : Fin m) (j : Fin m) : ElemOp m
+/-- Takes the `j`th row, multiplies it with `c : F` and adds it to the `i`th row-/
+| rowMulAdd (c : F) (i : Fin m) (j : Fin m) (hij : i≠j) : ElemOp m
+
+namespace ElemOp
+
+/--
+Operates an `E : ElemOp F m` on the `m×n` matrix `A`
+-/
+@[simp] def onMatrix (E : ElemOp F m) (A : Matrix (Fin m) (Fin k) F) : Matrix (Fin m) (Fin k) F :=
+match E with
+| scalarMul c _ i => A.updateRow i (c • (A i))
+| rowSwap i j => let newr := (A i)
+    Matrix.updateRow (Matrix.updateRow A i (A j)) j newr
+| rowMulAdd c i j _ => A.updateRow i (A i + (c • (A j)))
+
+end ElemOp
+
+
+
+namespace Fin
+
+/--Function that checks if all the entries in a tuple are zero-/
+@[simp] def allZero (v : Fin m → F) : Prop := ∀ (i : Fin m), v i = 0
+
+instance (v : Fin m → F) : Decidable (allZero v) :=
   inferInstanceAs <| Decidable (∀ (i : Fin m), v i = 0)
-end
 
-#eval Fin.allZero v1
+#eval allZero v1
 
-variable {F} in
 /--
 A tuple `v` has all its entries as `0` if and only if its head is `0` and all the
 entries of its tail are `0`.
 -/
-lemma Fin.allZero_head_tail (v : Fin (m+1) → F) : Fin.allZero v ↔ v 0 = 0 ∧ Fin.allZero (Fin.tail v) := by
+lemma allZero_head_tail (v : Fin (m+1) → F) : Fin.allZero v ↔ v 0 = 0 ∧ allZero (tail v) := by
   constructor
   · intro hv
     constructor
@@ -90,13 +137,12 @@ lemma Fin.allZero_head_tail (v : Fin (m+1) → F) : Fin.allZero v ↔ v 0 = 0 �
       show tail v ⟨k,Nat.succ_lt_succ_iff.mp hk⟩ = 0
       exact h2 ⟨k,Nat.succ_lt_succ_iff.mp hk⟩
 
-variable {F} in
 /--
 Given a tuple where not all of its entries are `0`, this function extracts the
 index of a nonzero element, along with a proof that the element at that index is
 nonzero.
 -/
-def Fin.allZero_not_ex_nonzero {v : Fin (m+1) → F} (hv : ¬ Fin.allZero v) :
+def allZero_not_ex_nonzero {v : Fin (m+1) → F} (hv : ¬ allZero v) :
   {i : Fin (m+1) // v i ≠ 0} := by
   induction m with
   | zero =>
@@ -114,14 +160,13 @@ def Fin.allZero_not_ex_nonzero {v : Fin (m+1) → F} (hv : ¬ Fin.allZero v) :
 
 def v2 : Fin 0 → ℚ := ![]
 
-lemma hv2 : (Fin.allZero v2) := by decide
--- #eval Fin.allZero_not_ex_nonzero hv2
+lemma hv2 : (allZero v2) := by decide
+-- #eval allZero_not_ex_nonzero hv2
 
-variable {F} in
 /--
 A tuple that doesn't have all of its entries as `0` is of size at least 1.
 -/
-lemma Fin.allZero_not_length {v : Fin k → F} (hv : ¬Fin.allZero v) : k≥1 := by
+lemma allZero_not_length {v : Fin k → F} (hv : ¬allZero v) : k≥1 := by
   contrapose hv
   push_neg at *
   apply Nat.lt_one_iff.mp at hv
@@ -129,61 +174,28 @@ lemma Fin.allZero_not_length {v : Fin k → F} (hv : ¬Fin.allZero v) : k≥1 :=
   | 0 => simp
   | l+1 => contradiction
 
-/--
-`ElemOp F m` is the type of elementary row operations that can be performed on
-a matrix over `F` with `m` rows
--/
-inductive ElemOp (m : ℕ) : Type where
-| scalarMul (c : F) (hc : c≠0) (i : Fin m) : ElemOp m
-| rowSwap (i : Fin m) (j : Fin m) : ElemOp m
-| rowMulAdd (c : F) (i : Fin m) (j : Fin m) (hij : i≠j) : ElemOp m
+end Fin
 
-namespace ElemOp
 
-variable {F} in
-/--
-Operates an `E : ElemOp F m` on the `m×n` matrix `A`
--/
-@[simp] def onMatrix (E : ElemOp F m) (A : Matrix (Fin m) (Fin k) F) : Matrix (Fin m) (Fin k) F :=
-match E with
-| scalarMul c _ i => A.updateRow i (c • (A i))
-| rowSwap i j => let newr := (A i)
-    Matrix.updateRow (Matrix.updateRow A i (A j)) j newr
-| rowMulAdd c i j _ => A.updateRow i (A i + (c • (A j)))
 
-end ElemOp
+namespace Matrix
 
-variable {F} in
-/--Row recursor for matrices-/
-def Matrix.rowRec {motive : {n : Nat} → Matrix (Fin n) α F → Sort _}
-  (zero : (M : Matrix (Fin 0) α F) → motive M)
-  (succ : {n : Nat} → (ih : (M : Matrix (Fin n) α F) → motive M) → ((M : Matrix (Fin n.succ) α F) → motive M)) :
-  {n : Nat} → (M : Matrix (Fin n) α F) → motive M :=
-  fun {n} ↦
-  match n with
-  | 0 => zero
-  | _+1 => succ (Matrix.rowRec zero succ)
-
-variable {F} in
 /--Extracts the first `k` rows of a matrix-/
-def Matrix.firstkRows (M : Matrix (Fin m) (Fin n) F) (k : ℕ) (hk : k ≤ m) : Matrix (Fin k) (Fin n) F :=
+def firstkRows (M : Matrix (Fin m) (Fin n) F) (k : ℕ) (hk : k ≤ m) : Matrix (Fin k) (Fin n) F :=
   M.submatrix (fun i => i.castLE hk) (fun j => j)
 
 #eval mat.firstkRows 2 (Nat.AtLeastTwo.prop)
 
 /--Appends the given row to the bottom of the matrix-/
-def Matrix.append_row (M : Matrix (Fin m) (Fin n) α) (v : (Fin n) → α) : Matrix (Fin (m+1)) (Fin n) α :=
+def append_row (M : Matrix (Fin m) (Fin n) α) (v : (Fin n) → α) : Matrix (Fin (m+1)) (Fin n) α :=
   Fin.append M (row (Fin 1) v)
 
-#check Fin.insertNth
-
-variable {F} in
 /--
 Given the `(i,j)`th entry of a matrix is 1, this function uses elementary
 row operations to clear the entries below this entry in the same column.
 -/
-def Matrix.eltColBelow (M : Matrix (Fin m) (Fin n) F) (hij : M i j = 1) : Matrix (Fin m) (Fin n) F :=
-  Matrix.rowRec (motive := fun {m} M => {i : Fin m} → M i j = 1 → Matrix (Fin m) (Fin n) F)
+def eltColBelow (M : Matrix (Fin m) (Fin n) F) (hij : M i j = 1) : Matrix (Fin m) (Fin n) F :=
+  rowRec (motive := fun {m} M => {i : Fin m} → M i j = 1 → Matrix (Fin m) (Fin n) F)
     (zero := fun M {i} _ => M)
     (succ := fun {k} ih A {i} hij =>
       if hi' : i.val = k then A else
@@ -205,31 +217,28 @@ def matr := !![0,7,8;1,2,3;4,5,(6:Rat)]
 def r1 : RowEchelonForm Rat 1 3 := RowEchelonForm.extend (RowEchelonForm.pad (RowEchelonForm.pad RowEchelonForm.nil)) ![3,4]
 #eval r1.toMatrix
 
-variable {F} in
 /--
 Deletes the first row of a matrix
 -/
-def Matrix.del_1strow (M : Matrix (Fin (m+1)) (Fin n) F) : Matrix (Fin m) (Fin n) F :=
+def del_1stRow (M : Matrix (Fin (m+1)) (Fin n) F) : Matrix (Fin m) (Fin n) F :=
   M.submatrix (fun l => ⟨l+1,Nat.add_lt_of_lt_sub l.2⟩) (·)
 
-variable {F} in
 /--
 Deletes the first column of a matrix
 -/
-def Matrix.del_1stcol (M : Matrix (Fin m) (Fin (n+1)) F) : Matrix (Fin m) (Fin n) F :=
+def del_1stCol (M : Matrix (Fin m) (Fin (n+1)) F) : Matrix (Fin m) (Fin n) F :=
   M.submatrix (·) (fun l => ⟨l+1,Nat.add_lt_of_lt_sub l.2⟩)
 
-variable {F} in
 /--
 Given an `m×n` matrix M over a field `F`, this function performs elementary row
 operations on M such that it can be written as a term of type
 `RowEchelonForm F m n`.
 -/
-def Matrix.toRowEchelonForm (M : Matrix (Fin m) (Fin n) F) : RowEchelonForm F m n :=
+def toRowEchelonForm (M : Matrix (Fin m) (Fin n) F) : RowEchelonForm F m n :=
   match n with
   | 0 => RowEchelonForm.nil
   | n+1 =>
-  if hM : (Fin.allZero (M · 0)) then RowEchelonForm.pad ((M.del_1stcol).toRowEchelonForm)
+  if hM : (Fin.allZero (M · 0)) then RowEchelonForm.pad ((M.del_1stCol).toRowEchelonForm)
   else
     have := Fin.allZero_not_length hM
     match m with
@@ -251,13 +260,16 @@ def Matrix.toRowEchelonForm (M : Matrix (Fin m) (Fin n) F) : RowEchelonForm F m 
       simp
       exact inv_mul_cancel hM1
     let M3 := eltColBelow M2 hm2
-    let v := ((M3.del_1stcol) 0)
-    RowEchelonForm.extend (M3.del_1stcol.del_1strow).toRowEchelonForm v
+    let v := ((M3.del_1stCol) 0)
+    RowEchelonForm.extend (M3.del_1stCol.del_1stRow).toRowEchelonForm v
 
 def mat1 : Matrix _ _ Rat := !![1,2,3;0,0,0;0,0,0]
 #eval mat1.toRowEchelonForm
 
-variable {F} in
+end Matrix
+
+
+
 /--
 Given an REF `R`, this creates a list containing the coordinates of the pivots in `R`, along with a
 proof of their value being 1.
@@ -268,15 +280,42 @@ def RowEchelonForm.pivots (R : RowEchelonForm F m n) : List {(i,j) : (Fin m)×(F
   | pad M => M.pivots.map (fun ⟨(i,j),hij⟩ => ⟨(i,j.succ),by simp at hij; simp [toMatrix,hij]⟩)
   | extend M _ => ⟨(0,0),by simp [toMatrix]⟩ :: (M.pivots.map (fun ⟨(i,j),hij⟩ => ⟨(i.succ,j.succ),by simp at hij; simp [toMatrix,hij]⟩))
 
--- in RowEchelonForm.toMatrix,
+/--
+Given a matrix in REF, any entry below the pivot in a pivot column is 0
+-/
+theorem RowEchelonForm.t1 (R : RowEchelonForm F m n) : ∀ ind ∈ R.pivots, ∀ k > ind.1.1, R.toMatrix k ind.1.2 = 0 := by
+  intro ⟨(i,j),hij⟩ ijpl k hk
+  simp at hij hk
+  induction R with
+  | nil => simp [pivots] at ijpl
+  | pad R0 ih =>
+    simp [pivots] at ijpl
+    simp [toMatrix]
+    match ijpl with
+    | ⟨a,b,⟨⟨hab,abpl⟩,hai,hbj⟩⟩ =>
+      simp [← hbj]
+      exact ih a b hab abpl k ((Eq.symm hai) ▸ hk)
+  | extend R0 w ih =>
+    simp [pivots] at ijpl
+    simp [toMatrix]
+    rcases ijpl with ⟨hi,hj⟩|⟨a,b,⟨⟨hab,abpl⟩,hai,hbj⟩⟩
+    · simp [hi,hj]
+      rw [hi] at hk
+      have h1 : ∃ p : Fin _, k = p.succ := Fin.eq_succ_of_ne_zero (Fin.pos_iff_ne_zero.mp hk)
+      rcases h1 with ⟨p,hp⟩
+      simp [hp]
+    · rw [← hai] at hk
+      have h1 : ∃ p : Fin _, k = p.succ := by refine Fin.eq_succ_of_ne_zero (Fin.ne_zero_of_lt hk)
+      rcases h1 with ⟨p,hp⟩
+      simp [hp]
+      have h2 := ih a b hab abpl p (by rw [hp] at hk; exact Fin.succ_lt_succ_iff.mp hk)
+      simp [← hbj]
+      exact h2
 
-#check Fin.cases
-
-variable {F} in
 /--
 Given a matrix in REF, any entry to the left of the pivot in a pivot row is 0
 -/
-theorem RowEchelonForm.t1 (R : RowEchelonForm F m n) : ∀ ind ∈ R.pivots, ∀ l < ind.1.2, R.toMatrix ind.1.1 l = 0 := by
+lemma RowEchelonForm.l1 (R : RowEchelonForm F m n) : ∀ ind ∈ R.pivots, ∀ l < ind.1.2, R.toMatrix ind.1.1 l = 0 := by
   intro ⟨(i,j),hij⟩ ijpl k hk
   simp at hij
   induction R with
@@ -313,66 +352,59 @@ theorem RowEchelonForm.t1 (R : RowEchelonForm F m n) : ∀ ind ∈ R.pivots, ∀
           exact Fin.succ_lt_succ_iff.mp hk
         exact ih a b hab abpl p h1
 
-variable {F} in
 /--
-Given a matrix in REF, any entry below the pivot in a pivot column is 0
+Given a tuple, not all of whose elements are 0, this function returns the following:
+1. The value of the first nonzero element (say x)
+2. The index of x
+3. Proof that x is present at the returned index
+4. Proof that it is the first nonzero element of the tuple
 -/
-theorem RowEchelonForm.t2 (R : RowEchelonForm F m n) : ∀ ind ∈ R.pivots, ∀ k > ind.1.1, R.toMatrix k ind.1.2 = 0 := by
-  intro ⟨(i,j),hij⟩ ijpl k hk
-  simp at hij hk
-  induction R with
-  | nil => simp [pivots] at ijpl
-  | pad R0 ih =>
-    simp [pivots] at ijpl
-    simp [toMatrix]
-    match ijpl with
-    | ⟨a,b,⟨⟨hab,abpl⟩,hai,hbj⟩⟩ =>
-      simp [← hbj]
-      exact ih a b hab abpl k ((Eq.symm hai) ▸ hk)
-  | extend R0 w ih =>
-    simp [pivots] at ijpl
-    simp [toMatrix]
-    rcases ijpl with ⟨hi,hj⟩|⟨a,b,⟨⟨hab,abpl⟩,hai,hbj⟩⟩
-    · simp [hi,hj]
-      rw [hi] at hk
-      have h1 : ∃ p : Fin _, k = p.succ := Fin.eq_succ_of_ne_zero (Fin.pos_iff_ne_zero.mp hk)
-      rcases h1 with ⟨p,hp⟩
-      simp [hp]
-    · rw [← hai] at hk
-      have h1 : ∃ p : Fin _, k = p.succ := by refine Fin.eq_succ_of_ne_zero (Fin.ne_zero_of_lt hk)
-      rcases h1 with ⟨p,hp⟩
-      simp [hp]
-      have h2 := ih a b hab abpl p (by rw [hp] at hk; exact Fin.succ_lt_succ_iff.mp hk)
-      simp [← hbj]
-      exact h2
+def Fin.firstNonzElt (v : Fin n → F) (hv : ¬ Fin.allZero v) : {(x,i) : F×(Fin n) | v i = x ∧ ∀ i' < i, v i' = 0} := --{x : F // x ≠ 0}×{i : Fin n // v i = x ∧ ∀ i' < i, v i' = 0} :=
+  match n with
+  | 0 => by simp at hv
+  | k+1 =>
+    if hv0 : v 0 = 0 then
+      have hvt : ¬ allZero (tail v) := by
+        rw [allZero_head_tail] at hv
+        simp [hv0] at hv
+        simp [hv]
+      let ⟨(x,ind),hxi⟩ := firstNonzElt (tail v) hvt
+      ⟨(x,ind.succ),by
+      simp at hxi ⊢
+      constructor
+      · exact hxi.1
+      · have h1 : ∀ i' < ind, v i'.succ = 0 := fun i' hi' => hxi.2 i' hi'
+        intro i' hi'
+        cases i' using Fin.cases with
+        | zero => exact hv0
+        | succ j' => exact h1 j' (succ_lt_succ_iff.mp hi')⟩
+    else ⟨(v 0,0),by simp⟩
+
+/--Given a matrix in REF, the first nonzero entry of any row is 1-/
+theorem RowEchelonForm.t2 (R : RowEchelonForm F m n) (i : Fin m) (hrow : ¬ Fin.allZero (R.toMatrix i)) : (Fin.firstNonzElt (R.toMatrix i) hrow).1.1 = 1 := by sorry
 
 -- if ⟨(i,j),hij⟩ and ⟨(k,l),hkl⟩ ∈ RowEchelonForm.pivots, then i < k ↔ j < l
 
--- theorem RowEchelonForm.t3 (R : RowEchelonForm F m n) : ∀ inda ∈ R.pivots, ∀ indb ∈ R.pivots, inda.1.1 < indb.1.1 ↔ inda.1.2 < indb.1.2 := by
---   intro ⟨(i,j),hij⟩ ijpl ⟨(k,l),hkl⟩ klpl
---   simp at hij hkl ⊢
---   constructor
---   · intro hik
---     by_contra hjl
---     push_neg at hjl
---     rw [le_iff_eq_or_lt] at hjl
---     rcases hjl with hjl|hjl
---     · have h1 := t2 R ⟨(i,j),hij⟩ ijpl k hik
---       simp [← hjl] at h1
---       rw [hkl] at h1
---       have := one_ne_zero (α:=F)
---       contradiction
---     · sorry
---   · sorry
+-------------------------Row Echelon Form section ends here------------------------------------------------------------------------------------------------------------------------------------
+-------------------------Row Reduced Echelon Form section begins here--------------------------------------------------------------------------------------------------------------------------
 
-variable {F} in
-def RowEchelonForm.zerosAtPivots (R0 : RowEchelonForm F m n) (w : Fin n → F) : Prop := (R0.pivots.all (fun ⟨(_,j),_⟩ => w j = 0))
+/--
+Given an m×n REF `R` and an n-vector `v`, this checks if `v` contains zeros
+  at all the column indices of `R` that contain pivots
+-/
+def RowEchelonForm.zerosAtPivots (R : RowEchelonForm F m n) (v : Fin n → F) : Prop :=
+  match R with
+  | nil => True
+  | pad R0 => zerosAtPivots R0 (Fin.tail v)
+  | extend R0 _ => (v 0 = 0) ∧ (zerosAtPivots R0 (Fin.tail v))
 
 @[instance]
-def RowEchelonForm.decidable_zerosAtPivots (R : RowEchelonForm F m n) (w : Fin n → F) : Decidable (R.zerosAtPivots w) :=
-  inferInstanceAs (Decidable (R.pivots.all (fun ⟨(_,j),_⟩ => w j = 0)))
+def RowEchelonForm.decidable_zerosAtPivots (R : RowEchelonForm F m n) (v : Fin n → F) : Decidable (R.zerosAtPivots v) :=
+  match m,n,R with
+  | _,_,nil => .isTrue (trivial)
+  | _,_,pad R0 => decidable_zerosAtPivots R0 (Fin.tail v)
+  | _,_,extend R0 _ => instDecidableAnd (dq := decidable_zerosAtPivots R0 (Fin.tail v))
 
-variable {F} in
 /--
 Checks if an REF satisfies the criteria to be in Row-Reduced Echelon Form (abbreviated as RREF):
 * The trivial REF (`nil`) is, by default, in RREF
@@ -385,6 +417,7 @@ def RowEchelonForm.isReduced : RowEchelonForm F m n → Prop
   | pad R0 => R0.isReduced
   | extend R0 w => (R0.zerosAtPivots w) ∧ (R0.isReduced)
 
+variable (F) in
 /--
 A custom Type for all matrices in RREF.
 -/
@@ -401,9 +434,10 @@ def mat3 : Matrix _ _ Rat := !![1,0,2;0,1,-15/2]
 #eval mat3.toRowEchelonForm.toMatrix
 #eval mat3.toRowEchelonForm.isReduced
 
-#check Fin.cons
-
 -- in RowReducedEchelonForm.toMatrix, any entry in the pivot column apart from the pivot is 0
+
+
+
 
 section
 namespace Nat
@@ -437,13 +471,13 @@ theorem iterate_ind_commute_self (n : ℕ) : (iterate_ind f n) ∘ f = f ∘ (it
 
 end Nat
 
-variable {F} in
+
+
 @[simp]
 lemma RowEchelonForm.zero_rows_cols_nil (R : RowEchelonForm F 0 0) : R = nil := by
   match R with
   | nil => rfl
 
-variable {F} in
 @[simp]
 lemma RowEchelonForm.zero_rows_pad (R : RowEchelonForm F 0 n) :
   R = Nat.iterate_ind (α:=fun n => RowEchelonForm F 0 n) pad n (nil) := by
@@ -456,18 +490,6 @@ lemma RowEchelonForm.zero_rows_pad (R : RowEchelonForm F 0 n) :
         rw [Nat.iterate_ind_succ,Nat.iterate_ind_commute_self]
         exact h1
 
---An REF with its first pivot at (i,j) is fromed from j paddings and an extend
-
-lemma RowEchelonForm.l1 (i : Fin m) (j : Fin n) (R : RowEchelonForm F m (n+j)) (hij : R.toMatrix i (j.castLE (Nat.le_add_right n ↑j)) = 1) (ptail : List {(i,j) | R.toMatrix i j = 1})
-  (hplist : R.pivots = ⟨(i,(j.castLE (Nat.le_add_right n ↑j))),by exact hij⟩::ptail) : ∃ (R0 : RowEchelonForm F m n) (v : Fin n → F), R = Nat.iterate_ind (α:=fun x => RowEchelonForm F m (n+x)) pad j R0 := by
-  match n with
-  | 0 => have := Fin.pos j; contradiction
-  | n+1 =>
-    induction j using Fin.induction with
-    | zero => simp at *
-    | succ k ih => sorry
-
-variable {F} in
 /--
 An REF that is formed from iterated paddings is in RREF
 -/
@@ -476,101 +498,93 @@ theorem RowEchelonForm.pad_isReduced : (Nat.iterate_ind (α := fun i => RowEchel
     | zero => simp; trivial
     | succ n ih => rw [Nat.iterate_ind_succ,Nat.iterate_ind_commute_self,Function.comp_apply,isReduced]; exact ih
 
-variable {F} in
-/--
-Gives the submatrix of an m×n matrix `M` from the `(i,j)`th entry to the `(m,n)`th entry
--/
-def Matrix.botRightij (M : Matrix (Fin m) (Fin n) F) (i : Fin m) (j : Fin n) : Matrix (Fin (m-i)) (Fin (n-j)) F :=
-  M.submatrix (fun k => ⟨k+i,Nat.add_lt_of_lt_sub k.2⟩) (fun l => ⟨l+j,Nat.add_lt_of_lt_sub l.2⟩)
-
-#check List.indexOf
-
-variable {F} in
-def RowReducedEchelonForm.eltAux (R0 : RowReducedEchelonForm F m n) (plist : List {(i,j) : (Fin m)×(Fin n) | R0.1.toMatrix i j = 1}) (v : Fin n → F) : Fin n → F :=
-  match plist with
-  | [] => v
-  | ⟨(i,j),_⟩::tail =>
-    let w := eltAux R0 tail v
-    (w + (-(w j))•(R0.1.toMatrix i))
-
-variable {F} in
+-- This match bug is causing a ton of problems
 /--Given an RREF `R0` and a vector `v` by which the RREF is to be extended, this function eliminates all the entries in v that
-correspond to the pivot columns of R0.-/
-def RowReducedEchelonForm.extend_eltPivotColEntries (R0 : RowReducedEchelonForm F m n) (v : Fin n → F) : Fin n → F :=
-  eltAux R0 R0.1.pivots v
+correspond to the pivot columns of R0, using elementary row operations.-/
+def RowReducedEchelonForm.eltPivotColEntries (R : RowReducedEchelonForm F m n) (v : Fin n → F) : Fin n → F :=
+  match m,n,R with
+  | _,_,⟨.nil,_⟩ => v
+  | _,_,⟨.pad R0,hR0⟩ => Fin.cons (v 0) (eltPivotColEntries ⟨R0,hR0⟩ (Fin.tail v))
+  | _,_,⟨.extend R0 v',hR0⟩ =>
+    let w := eltPivotColEntries ⟨R0,hR0.2⟩ (Fin.tail v)
+    Fin.cons 0 (w + (-(v 0))•v')
 
-
---Work in progress from here on
-
-def mat6 : Matrix _ _ Rat := !![0,1,0,0;0,0,1,0]
+def mat6 : Matrix _ _ Rat := !![0,1,0,2;0,0,1,0]
 def v6 : _ → Rat := ![4,5,6,7]
 def rref6 : RowReducedEchelonForm Rat _ _ := ⟨mat6.toRowEchelonForm,sorry⟩
-#eval rref6.extend_eltPivotColEntries v6
+#eval rref6.eltPivotColEntries v6
 
--- This match bug is causing a ton of problems
-lemma RowReducedEchelonForm.extend_eltPivotColEntries_rowReduced (R : RowReducedEchelonForm F m n) (v : Fin n → F) :
-  (R.1.extend (R.extend_eltPivotColEntries v)).isReduced := by
-  match m,n,R with
-  | _,_,⟨RowEchelonForm.nil,_⟩ =>
-    simp [RowEchelonForm.isReduced,RowEchelonForm.zerosAtPivots]
-  | _,_,⟨.pad R0,hR⟩ =>
-    simp [RowEchelonForm.isReduced]
-    constructor
-    · simp [RowEchelonForm.zerosAtPivots,RowEchelonForm.pivots]
-      intro i j hij i' j' hi'j' hi'j'p hii' hjj'
-      simp [extend_eltPivotColEntries,RowEchelonForm.pivots]
-      induction R0.pivots with
-      | nil =>
-      | cons ⟨(k,l),hkl⟩ plist ih => sorry
-      -- match hr:R0.pivots with
-      -- | [] => rw [hr] at hi'j'p; contradiction
-      -- | ⟨(k,l),hkl⟩::plist =>
-      --   simp [extend_eltPivotColEntries.eltAux]
-    · rwa [RowEchelonForm.isReduced] at hR
-  | _,_,⟨.extend R0 w,hR⟩ =>
-    simp [RowEchelonForm.isReduced]
-    constructor
-    · sorry
-    · rwa [RowEchelonForm.isReduced] at hR
+lemma RowEchelonForm.l2 (R : RowEchelonForm F m n) (hv : R.zerosAtPivots v) (hw : R.zerosAtPivots w) (c : F) :
+  R.zerosAtPivots (v + c•w) := by
+  induction R with
+  | nil => dsimp [zerosAtPivots]
+  | pad R0 ih =>
+    dsimp [zerosAtPivots] at *
+    convert ih hv hw
+  | extend R0 w' ih =>
+    dsimp [zerosAtPivots] at *
+    simp [hv,hw]
+    convert ih hv.2 hw.2
 
+/--If all the entries of a vector `v` that correspond to the pivot columns of an RREF `R` have been eliminated, then
+`R` can be extended by `v` to get a new RREF-/
+lemma RowReducedEchelonForm.eltPivotColEntries_rowReduced (R : RowReducedEchelonForm F m n) (v : Fin n → F) :
+  (R.1.extend (R.eltPivotColEntries v)).isReduced := by
+  match R with
+  | ⟨R,hR⟩ =>
+    induction R with
+    | nil => simp [RowEchelonForm.isReduced,RowEchelonForm.zerosAtPivots]
+    | pad R0 ih =>
+      simp [RowEchelonForm.isReduced,RowEchelonForm.zerosAtPivots]
+      constructor
+      · have := ih ⟨R0,hR⟩ (Fin.tail v) hR
+        dsimp [RowEchelonForm.isReduced] at this
+        simp [eltPivotColEntries]
+        exact this.1
+      · exact hR
+    | extend R0 w ih =>
+      simp [RowEchelonForm.isReduced] at hR ⊢
+      constructor
+      · simp [RowEchelonForm.zerosAtPivots]
+        constructor
+        · simp [eltPivotColEntries]
+        · have := ih ⟨R0,hR.2⟩ (Fin.tail v) hR.2
+          dsimp [RowEchelonForm.isReduced] at this
+          simp [eltPivotColEntries]
+          set v1 := (eltPivotColEntries ⟨R0,hR.2⟩ (Fin.tail v))
+          have h1 := this.1
+          have h2 := hR.1
+          convert R0.l2 h1 h2 (-(v 0)) using 2
+          simp
+      · exact hR
 
-def mat5 : Matrix _ _ Rat := !![1,0,0;0,1,0;0,0,1]
-def rref1 : RowReducedEchelonForm Rat _ _ := ⟨mat5.toRowEchelonForm,sorry⟩
-#eval rref1.extend_eltPivotColEntries ![5,6,7]
-
-variable {F} in
+/--
+Given an REF `R`, this function performs the back substitution phase of the Row Reduction algorithm:
+* It starts by picking the first row (say `v`) and the RREF that lies below it )(say `R0`)
+* It eliminates all the entries in `v` that lie in the pivot columns of `R0` using elementary row operations
+* It repeats the same process by taking `R0` as the new REF
+-/
 def RowEchelonForm.backSubstitution (R : RowEchelonForm F m n) : RowReducedEchelonForm F m n :=
   match R with
   | nil => ⟨nil,trivial⟩
-  | pad R0 => ⟨pad (backSubstitution R0).1,sorry⟩
+  | pad R0 => ⟨pad (backSubstitution R0).1,by dsimp [isReduced]; exact (backSubstitution R0).2⟩
   | extend R0 v =>
-    match R0.pivots with
-    | [] => ⟨R0.extend v,sorry⟩
-    | ⟨(i,j),hij⟩::l =>
-      let R1 := R0.backSubstitution
-      let M := (ElemOp.rowMulAdd (-(v j)) 0 i (sorry)).onMatrix (R0.extend v).toMatrix
-      -- TPT M is in REF
-      -- TPT M is in RREF
+    let R' := backSubstitution R0
+    ⟨R'.1.extend (R'.eltPivotColEntries v),RowReducedEchelonForm.eltPivotColEntries_rowReduced R' v⟩
+
+def mat8 : Matrix _ _ Rat := !![1,2,3;4,5,6;7,8,9]
+#eval mat8.toRowEchelonForm.toMatrix
+#eval mat8.toRowEchelonForm.backSubstitution.1.toMatrix
+
+def mat9 : Matrix _ _ Rat := !![0,-7,-4,2;2,4,6,12;3,1,-1,-2]
+#eval mat9.toRowEchelonForm.toMatrix
+#eval mat9.toRowEchelonForm.backSubstitution.1.toMatrix
+
+def mat10 : Matrix _ _ Rat := !![2,10,-1;3,15,2]
+#eval mat10.toRowEchelonForm.toMatrix
+#eval mat10.toRowEchelonForm.backSubstitution.1.toMatrix
 
 
 
-  -- Matrix.rowRec (motive := fun {m} M => RowReducedEchelonForm F m n)
-  -- (sorry)
-  -- (sorry)
-  -- R.toMatrix
-
-  -- match m with
-  -- | 0 => ⟨R,by rw [zero_rows_pad R]; exact pad_isReduced⟩
-  -- | k+1 => Matrix.rowRec {motive := fun M => RowEchelonForm F m n → RowReducedEchelonForm F m n}
-  --   (sorry)
-  --   (sorry)
-  --   (R.toMatrix)
-
-
-    -- let plist := R.pivots.filter (fun ⟨(i,_),_⟩ => i > k)
-    -- let M := R.toMatrix
-    -- match plist with
-    -- | [] =>
-    --   have hr : R.isReduced := by
-
-    --let A := (ElemOp.rowMulAdd (-(M k j)) k i (by intro h; rw [←h] at hi'; simp at hi')).onMatrix M
+--MAGNUM OPUS : PART 1
+def Matrix.toRowReducedEchelonForm (M : Matrix (Fin m) (Fin n) F) : RowReducedEchelonForm F m n := M.toRowEchelonForm.backSubstitution
