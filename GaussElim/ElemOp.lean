@@ -305,8 +305,8 @@ def Matrix.eltColBelow (A : Matrix (Fin m) (Fin n) F) (hij : A i j = 1) : (Matri
     let r := D.1 k
     (append_row C.1 r,elist)
 
-def matr : Matrix _ _ Rat := !![1,2,3;4,5,6;7,8,9]
-#eval matr.eltColBelow (i:=0) (j:=0) (rfl)
+-- def matr : Matrix _ _ Rat := !![1,2,3;4,5,6;7,8,9]
+-- #eval matr.eltColBelow (i:=0) (j:=0) (rfl)
 
 lemma Matrix.eltColBelow_l1 (A : Matrix (Fin m) (Fin n) F ) (hij : A i j = 1) : ElemOp.list_onMatrix (eltColBelow A hij).2 A i = A i := by
   induction m with
@@ -407,5 +407,5 @@ def Matrix.toRowEchelonForm (M : Matrix (Fin m) (Fin n) F) : RowEchelonForm F m 
     let v := ((M3.del_1stCol) 0)
     RowEchelonForm.extend (M3.del_1stCol.del_1stRow).toRowEchelonForm v
 
-def mat1 : Matrix _ _ Rat := !![1,2,3;0,0,0;0,0,0]
-#eval mat1.toRowEchelonForm
+-- def mat1 : Matrix _ _ Rat := !![1,2,3;0,0,0;0,0,0]
+-- #eval mat1.toRowEchelonForm
