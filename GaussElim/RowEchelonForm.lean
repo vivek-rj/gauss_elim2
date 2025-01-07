@@ -50,7 +50,7 @@ def pivots (R : RowEchelonForm F m n) : List {(i,j) : (Fin m)×(Fin n) | R.toMat
   | extend M _ => ⟨(0,0),by simp [toMatrix]⟩ :: (M.pivots.map (fun ⟨(i,j),hij⟩ => ⟨(i.succ,j.succ),by simp at hij; simp [toMatrix,hij]⟩))
 
 /--REF PROPERTY 1 : Given a matrix in REF, any entry below the pivot in a pivot column is 0-/
-theorem t1 (R : RowEchelonForm F m n) : ∀ ind ∈ R.pivots, ∀ k > ind.1.1, R.toMatrix k ind.1.2 = 0 := by
+theorem zerosBelowPivot (R : RowEchelonForm F m n) : ∀ ind ∈ R.pivots, ∀ k > ind.1.1, R.toMatrix k ind.1.2 = 0 := by
   intro ⟨(i,j),hij⟩ ijpl k hk
   simp at hij hk
   induction R with
@@ -80,7 +80,7 @@ theorem t1 (R : RowEchelonForm F m n) : ∀ ind ∈ R.pivots, ∀ k > ind.1.1, R
       exact h2
 
 /--PIVOT PROPERTY 1 : Given a matrix in REF, any entry to the left of the pivot in a pivot row is 0-/
-lemma l1 (R : RowEchelonForm F m n) : ∀ ind ∈ R.pivots, ∀ l < ind.1.2, R.toMatrix ind.1.1 l = 0 := by
+lemma zerosBeforePivot (R : RowEchelonForm F m n) : ∀ ind ∈ R.pivots, ∀ l < ind.1.2, R.toMatrix ind.1.1 l = 0 := by
   intro ⟨(i,j),hij⟩ ijpl k hk
   simp at hij
   induction R with
@@ -124,7 +124,7 @@ theorem List.head_map (f : α → β) (l : List α) (hl : l ≠ []) : (l.map f).
   | _::_ => simp
 
 /--In an REF, the 'i' coordinate of the first pivot is always 0-/
-lemma l2 (R : RowEchelonForm F m n) (hR : R.pivots ≠ []) : (R.pivots.head hR).1.1.val = 0 := by
+lemma pivots_rowOfFirstPivot_eq_firstRow (R : RowEchelonForm F m n) (hR : R.pivots ≠ []) : (R.pivots.head hR).1.1.val = 0 := by
   induction R with
   | nil => simp [pivots] at hR
   | pad R0 ih =>
@@ -135,14 +135,14 @@ lemma l2 (R : RowEchelonForm F m n) (hR : R.pivots ≠ []) : (R.pivots.head hR).
   | extend R0 w _ =>
     simp [pivots]
 
-lemma l3 (R : RowEchelonForm F m n) : R.pivots.length ≤ m := by
+lemma pivots_length_le_numRows (R : RowEchelonForm F m n) : R.pivots.length ≤ m := by
   induction R with
   | nil => simp [pivots]
   | pad R0 ih => simp [pivots]; exact ih
   | extend R0 w ih => simp [pivots]; exact ih
 
 /--PIVOT PROPERTY 2 : In an REF, the 'i' coordinates of the pivots are exactly their indices in the pivot list.-/
-lemma l4 (R : RowEchelonForm F m n) (x : Fin R.pivots.length) : (R.pivots.get x).1.1 = x.castLE (l3 R) := by
+lemma pivots_pivotInd_eq_pivotRows (R : RowEchelonForm F m n) (x : Fin R.pivots.length) : (R.pivots.get x).1.1 = x.castLE (pivots_length_le_numRows R) := by
   induction R with
   | nil =>
     simp [pivots] at x
@@ -251,7 +251,7 @@ end Fin
 namespace RowEchelonForm
 
 /--Given a matrix in REF, the first nonzero entry of any nonzero row is 1-/
-theorem t2 (R : RowEchelonForm F m n) (i : Fin m) (hrow : ¬ Fin.allZero (R.toMatrix i)) : (Fin.firstNonzElt (R.toMatrix i) hrow).1.1 = 1 := by
+lemma row_firstNonzElt_eq_one (R : RowEchelonForm F m n) (i : Fin m) (hrow : ¬ Fin.allZero (R.toMatrix i)) : (Fin.firstNonzElt (R.toMatrix i) hrow).1.1 = 1 := by
   induction R with
   | nil =>
     simp at hrow
@@ -294,9 +294,9 @@ theorem t2 (R : RowEchelonForm F m n) (i : Fin m) (hrow : ¬ Fin.allZero (R.toMa
 
 --'let' pattern matching is being very annoying here
 /--Given a matrix in REF, the first nonzero entry of any nonzero row is a pivot-/
-theorem t3 (R : RowEchelonForm F m n) (i : Fin m) (hrow : ¬ Fin.allZero (R.toMatrix i)) :
+theorem row_firstNonzElt_eq_pivot (R : RowEchelonForm F m n) (i : Fin m) (hrow : ¬ Fin.allZero (R.toMatrix i)) :
   let data := Fin.firstNonzElt (R.toMatrix i) hrow
-  ⟨(i,data.1.2),by simp [data.2.2]; rw [← t2 R i hrow]⟩ ∈ R.pivots := by
+  ⟨(i,data.1.2),by simp [data.2.2]; rw [← row_firstNonzElt_eq_one R i hrow]⟩ ∈ R.pivots := by
   induction R with
   | nil => simp [toMatrix] at hrow
   | pad R0 ih =>
@@ -314,7 +314,7 @@ theorem t3 (R : RowEchelonForm F m n) (i : Fin m) (hrow : ¬ Fin.allZero (R.toMa
     simp [Fin.firstNonzElt]
     simp only [pivots,List.mem_map,Subtype.mk.injEq, Prod.mk.injEq,Fin.succ_inj]
     simp at h2
-    use ⟨(i,((Fin.firstNonzElt (R0.toMatrix i) h1)).1.2),by simp [((Fin.firstNonzElt (R0.toMatrix i) h1)).2.2]; exact t2 R0 i h1⟩
+    use ⟨(i,((Fin.firstNonzElt (R0.toMatrix i) h1)).1.2),by simp [((Fin.firstNonzElt (R0.toMatrix i) h1)).2.2]; exact row_firstNonzElt_eq_one R0 i h1⟩
     simp [h2]
     have h3 : (Fin.tail (FinVec.map (fun r ↦ Matrix.vecCons 0 r) R0.toMatrix i)) = R0.toMatrix i := by simp; rfl
     congr 1
@@ -338,14 +338,14 @@ theorem t3 (R : RowEchelonForm F m n) (i : Fin m) (hrow : ¬ Fin.allZero (R.toMa
       have h2 := ih p h1
       simp only [pivots,List.mem_map,Subtype.mk.injEq, Prod.mk.injEq,Fin.succ_inj,List.mem_cons]
       right
-      use ⟨(p,((Fin.firstNonzElt (R0.toMatrix p) h1)).1.2),by simp [((Fin.firstNonzElt (R0.toMatrix p) h1)).2.2]; exact t2 R0 p h1⟩
+      use ⟨(p,((Fin.firstNonzElt (R0.toMatrix p) h1)).1.2),by simp [((Fin.firstNonzElt (R0.toMatrix p) h1)).2.2]; exact row_firstNonzElt_eq_one R0 p h1⟩
       simp [h2,Matrix.vecCons]
       congr 1
       apply Fin.firstNonzElt_eq
       simp
 
 /--if `(i,j)` and `(k,l)` `∈` `REF.pivots`, then `i < k → j < l`-/
-lemma l5 (R : RowEchelonForm F m n) : ∀ ind_a ∈ R.pivots, ∀ ind_b ∈ R.pivots, ind_a.1.1 < ind_b.1.1 → ind_a.1.2 < ind_b.1.2 := by
+lemma pivots_colsAscending_if_rowsAscending (R : RowEchelonForm F m n) : ∀ ind_a ∈ R.pivots, ∀ ind_b ∈ R.pivots, ind_a.1.1 < ind_b.1.1 → ind_a.1.2 < ind_b.1.2 := by
   induction R with
   | nil => simp [pivots]
   | pad R0 ih =>
@@ -381,34 +381,34 @@ lemma l5 (R : RowEchelonForm F m n) : ∀ ind_a ∈ R.pivots, ∀ ind_b ∈ R.pi
         exact this hac
 
 /--if `(i,j)` and `(k,l)` `∈` `REF.pivots`, then `j < l → i < k`-/
-lemma l6 (R : RowEchelonForm F m n) : ∀ ind_a ∈ R.pivots, ∀ ind_b ∈ R.pivots, ind_a.1.2 < ind_b.1.2 → ind_a.1.1 < ind_b.1.1 := by
+lemma pivots_rowsAscending_if_colsAscending (R : RowEchelonForm F m n) : ∀ ind_a ∈ R.pivots, ∀ ind_b ∈ R.pivots, ind_a.1.2 < ind_b.1.2 → ind_a.1.1 < ind_b.1.1 := by
   intro ind_a ha ind_b hb h1
   contrapose h1
   push_neg at h1 ⊢
   rcases (lt_or_eq_of_le h1) with h1|h1
-  · exact Fin.le_of_lt (l5 R ind_b hb ind_a ha h1)
+  · exact Fin.le_of_lt (pivots_colsAscending_if_rowsAscending R ind_b hb ind_a ha h1)
   · by_contra h2
     push_neg at h2
-    have h3 := l1 R ind_b hb ind_a.1.2 h2
+    have h3 := zerosBeforePivot R ind_b hb ind_a.1.2 h2
     rw [h1] at h3
     have h4 := ind_a.2
     simp at h4
     rw [h3] at h4
     exact zero_ne_one h4
 
-lemma l7 (R : RowEchelonForm F m n) : ∀ ind_a ∈ R.pivots, ∀ ind_b ∈ R.pivots, ind_a.1.1 < ind_b.1.1 ↔ ind_a.1.2 < ind_b.1.2 :=
-  fun x hx y hy => ⟨l5 R x hx y hy,l6 R x hx y hy⟩
+lemma pivots_colsAscending_iff_rowsAscending (R : RowEchelonForm F m n) : ∀ ind_a ∈ R.pivots, ∀ ind_b ∈ R.pivots, ind_a.1.1 < ind_b.1.1 ↔ ind_a.1.2 < ind_b.1.2 :=
+  fun x hx y hy => ⟨pivots_colsAscending_if_rowsAscending R x hx y hy,pivots_rowsAscending_if_colsAscending R x hx y hy⟩
 
 /--REF PROPERTY 2 : In an REF, the pivot columns are arranged in ascending order-/
-theorem t4 (R : RowEchelonForm F m n) (i j : Fin R.pivots.length) (hij : i < j) : (R.pivots.get i).1.2 < (R.pivots.get j).1.2 := by
-  have h1 := l4 R i
-  have h2 := l4 R j
+theorem pivots_colsAscending (R : RowEchelonForm F m n) (i j : Fin R.pivots.length) (hij : i < j) : (R.pivots.get i).1.2 < (R.pivots.get j).1.2 := by
+  have h1 := pivots_pivotInd_eq_pivotRows R i
+  have h2 := pivots_pivotInd_eq_pivotRows R j
   rw [← Fin.val_eq_val] at h1 h2
   simp at h1 h2
   rw [Fin.lt_iff_val_lt_val] at hij
   rw [← h1,← h2] at hij
   rw [← Fin.lt_iff_val_lt_val] at hij
-  exact l5 R (R.pivots.get i) (List.get_mem _ i.1 i.2) (R.pivots.get j) (List.get_mem _ j.1 j.2) hij
+  exact pivots_colsAscending_if_rowsAscending R (R.pivots.get i) (List.get_mem _ i.1 i.2) (R.pivots.get j) (List.get_mem _ j.1 j.2) hij
 
 def truncation (R : RowEchelonForm F m n) : (a : Nat)×(RowEchelonForm F a n)×{b : Nat // a+b = m} :=
   match R with
@@ -587,8 +587,8 @@ lemma RowEchelonForm.nonZeroRows_l1 (R : RowEchelonForm F m n) :
   | extend R0 w ih => -- extend and append_k_zerorows commute
     sorry
 
-def mat := !![1,2,3;4,5,6;7,8,(9:Rat)]
-#eval (Matrix.vecCons ![-1,-2,(-3:Rat)] mat)
-def v1 := ![0,0,(0:Rat)]
-#eval FinVec.map (fun r => (Fin.cons 0 r : Fin _ → _)) mat
-#eval FinVec.map (fun r => (Matrix.vecCons 0 r)) mat
+-- def mat := !![1,2,3;4,5,6;7,8,(9:Rat)]
+-- #eval (Matrix.vecCons ![-1,-2,(-3:Rat)] mat)
+-- def v1 := ![0,0,(0:Rat)]
+-- #eval FinVec.map (fun r => (Fin.cons 0 r : Fin _ → _)) mat
+-- #eval FinVec.map (fun r => (Matrix.vecCons 0 r)) mat
